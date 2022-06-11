@@ -1,0 +1,144 @@
+import neat
+import os
+import time
+import copy
+import pickle
+
+class GameXO:
+    
+    def __init__(self):
+        self.field = dict(zip(range(9), [" "] * 9))
+        self.steps = 0
+        
+    def putX(self, pos):
+        self.field[pos] = "x"
+        self.steps += 1
+        
+    def putO(self, pos):
+        self.field[pos] = "o"
+        self.steps += 1
+            
+    def drawField(self):
+        clear = lambda: os.system("clear")
+        clear()
+        print(" ")
+        for lines in range(3):
+            line = ""
+            for place in range(3):
+                line += f"{self.field[place + lines * 3]}|"
+            print(line)
+            print("-+-+-")
+    
+    def checkWinner(self):
+        for i in range(3):
+            if self.field[0 + i * 3] == self.field[1 + i * 3] == self.field[2 + i * 3]:
+                return self.field[0 + i * 3]
+            elif self.field[i] == self.field[3 + i] == self.field[6 + i]:
+                return self.field[i]
+        if self.field[0] == self.field[4] == self.field[8] or self.field[2] == self.field[4] == self.field[6]:
+            return self.field[4]
+        
+    def resetField(self):
+        self.field = dict(zip(range(9), [" "] * 9))
+        self.steps = 0
+        
+    def validMove(self, pos):
+            if self.field[pos] == " ":
+                return True
+            else:
+                return False 
+    
+    def playRound(self, genome1, genome2, config):
+        
+        net1 = neat.nn.FeedForwardNetwork.create(genome1, config)
+        net2 = neat.nn.FeedForwardNetwork.create(genome2, config)
+        
+        self.genome1 = genome1
+        self.genome2 = genome2
+        
+        self.resetField()
+        while True:
+            indexes = copy.copy(self.field)
+            for k in indexes:
+                if indexes[k] == " ":
+                    indexes[k] = 0
+                elif indexes[k] == "x":
+                    indexes[k] = 1
+                elif indexes[k] == "o":
+                    indexes[k] = 2
+                    
+            outputX = net1.activate((indexes[0], indexes[1], indexes[2], indexes[3], indexes[4],  indexes[5], indexes[6], indexes[7], indexes[8]))
+                        
+            desX = outputX.index(max(outputX))
+
+            #pos = input("pos for x")
+            if not self.validMove(desX):
+                self.genome1.fitness -= 5
+                return "x lost"
+            self.putX(desX)
+            self.genome1.fitness += 3
+            self.drawField()
+            time.sleep(0.33)
+            if self.checkWinner() == "x":
+                self.genome1.fitness += 25
+                return "x win"
+            if self.steps == 9:
+                self.genome1.fitness -= 1
+                self.genome2.fitness -= 1
+                return "tie"
+                
+            for index in indexes:
+                if index == " ":
+                    index = 0
+                elif index == "x":
+                    index = 1
+                elif index == "o":
+                    index = 2
+                      
+            outputO = net2.activate((indexes[0], indexes[1], indexes[2], indexes[3], indexes[4],  indexes[5], indexes[6], indexes[7], indexes[8]))
+             
+            desO = outputO.index(max(outputO))
+                       
+            #pos = input("pos for o")
+            if not self.validMove(desO):
+                self.genome2.fitness -= 5
+                return "o lost"
+            self.putO(desO)
+            self.genome2.fitness += 3
+            self.drawField()
+            time.sleep(0.33)
+            if self.checkWinner() == "o":
+                self.genome2.fitness += 25
+                return "o win"        
+
+def eval_genomes(genomes, config):
+    for i, (genome_id1, genome1) in enumerate(genomes):
+        genome1.fitness = 0
+        for genome_id2, genome2 in genomes[min(i + 1, len(genomes) - 1) : ]:
+            genome2.fitness = 0 if genome2.fitness == None else genome2.fitness
+            game = GameXO()
+            stat = game.playRound(genome1, genome2, config)
+            #print(stat)
+
+def run(config_path):
+    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet, neat.DefaultStagnation, config_path)
+    
+    p = neat.Checkpointer.restore_checkpoint("neat-checkpoint-192")
+    #p = neat.Population(config)
+    
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+    
+    
+    p.add_reporter(neat.Checkpointer(25))
+    winner = p.run(eval_genomes, 101)
+    #with open("best.pickle", "wb") as f:
+        #pickle.dump(winner, f)
+
+if __name__ == "__main__":
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, "config-feedforward.txt")
+    run(config_path)
+
+print("Тут был Леха")
